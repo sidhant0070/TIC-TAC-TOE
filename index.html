@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe with Scoreboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            /* Prevent scrolling on the body itself */
+            overflow: hidden;
+            height: 100vh;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .cell {
+            background-color: #16213e;
+            border: 2px solid #0f3460;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .cell:hover {
+            background-color: #2a3a5e;
+            transform: scale(1.05);
+        }
+        .cell.x { color: #e94560; }
+        .cell.o { color: #53a8b6; }
+        .cell.win {
+            background-color: #f9c74f;
+            animation: pulse 0.8s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .status {
+            font-weight: 600;
+            min-height: 30px; /* Further reduced height */
+            color: #f9c74f;
+        }
+        .btn {
+            color: #ffffff;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        .restart-btn { background-color: #e94560; }
+        .restart-btn:hover { background-color: #c7304a; transform: translateY(-2px); }
+        .start-btn { background-color: #53a8b6; }
+        .start-btn:hover { background-color: #3b8a99; transform: translateY(-2px); }
+        
+        .scoreboard {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 300px; /* Match smaller board size */
+            background-color: #16213e;
+            padding: 0.5rem; /* Reduced padding */
+            border-radius: 12px;
+            border: 2px solid #0f3460;
+        }
+        .score { text-align: center; }
+        .score-name { font-size: 1rem; font-weight: 500; }
+        .score-value { font-size: 1.5rem; font-weight: 700; }
+        .score-x { color: #e94560; }
+        .score-o { color: #53a8b6; }
+
+        .player-setup input {
+            background-color: #16213e;
+            border: 2px solid #0f3460;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            color: white;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center">
+
+    <main class="flex flex-col items-center justify-center w-full p-4">
+        <div class="text-center my-2"> <!-- Reduced margin -->
+            <h1 class="text-4xl sm:text-5xl font-bold text-white">Tic-Tac-Toe</h1>
+        </div>
+
+        <!-- Player Setup Screen -->
+        <div id="playerSetup" class="w-full max-w-xs flex flex-col items-center gap-4">
+            <div class="player-setup flex justify-around w-full">
+                <input type="text" id="playerXName" placeholder="Player X Name" value="Player X" class="w-2/5">
+                <input type="text" id="playerOName" placeholder="Player O Name" value="Player O" class="w-2/5">
+            </div>
+            <button id="startGameBtn" class="btn start-btn w-full">Start Game</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="gameContainer" class="hidden flex-col items-center">
+            <div id="scoreboard" class="scoreboard my-2"> <!-- Reduced margin -->
+                <div class="score">
+                    <div id="scoreNameX" class="score-name score-x">Player X</div>
+                    <div id="scoreValueX" class="score-value score-x">0</div>
+                </div>
+                <div class="score">
+                    <div id="scoreNameO" class="score-name score-o">Player O</div>
+                    <div id="scoreValueO" class="score-value score-o">0</div>
+                </div>
+            </div>
+
+            <div id="status" class="status my-2 text-lg sm:text-xl text-center"></div> <!-- Reduced margin -->
+            <div id="board" class="board w-64 h-64 sm:w-72 sm:h-72 aspect-square my-2"></div> <!-- Using aspect-square and reduced margin -->
+            <div class="flex space-x-4 mt-2">
+                 <button id="restartBtn" class="restart-btn btn">New Round</button>
+                 <button id="resetGameBtn" class="btn start-btn">Reset Game</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // DOM Elements
+        const playerSetup = document.getElementById('playerSetup');
+        const gameContainer = document.getElementById('gameContainer');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const boardElement = document.getElementById('board');
+        const statusElement = document.getElementById('status');
+        const restartBtn = document.getElementById('restartBtn');
+        const resetGameBtn = document.getElementById('resetGameBtn');
+        const playerXNameInput = document.getElementById('playerXName');
+        const playerONameInput = document.getElementById('playerOName');
+        const scoreNameX = document.getElementById('scoreNameX');
+        const scoreValueX = document.getElementById('scoreValueX');
+        const scoreNameO = document.getElementById('scoreNameO');
+        const scoreValueO = document.getElementById('scoreValueO');
+
+        // Game State
+        let board = ['', '', '', '', '', '', '', '', ''];
+        let currentPlayer = 'X';
+        let isGameActive = true;
+        let scores = { X: 0, O: 0 };
+        let playerNames = { X: 'Player X', O: 'Player O' };
+
+        const winningConditions = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+
+        function handleResultValidation() {
+            let roundWon = false;
+            let winningCombination = [];
+            for (let i = 0; i < winningConditions.length; i++) {
+                const winCondition = winningConditions[i];
+                const a = board[winCondition[0]];
+                const b = board[winCondition[1]];
+                const c = board[winCondition[2]];
+                if (a === '' || b === '' || c === '') continue;
+                if (a === b && b === c) {
+                    roundWon = true;
+                    winningCombination = winCondition;
+                    break;
+                }
+            }
+
+            if (roundWon) {
+                statusElement.textContent = `${playerNames[currentPlayer]} has won!`;
+                isGameActive = false;
+                scores[currentPlayer]++;
+                updateScoreboard();
+                winningCombination.forEach(index => {
+                    document.querySelector(`[data-cell-index='${index}']`).classList.add('win');
+                });
+                return;
+            }
+
+            if (!board.includes('')) {
+                statusElement.textContent = `Game ended in a draw!`;
+                isGameActive = false;
+                return;
+            }
+
+            changePlayer();
+        }
+
+        const changePlayer = () => {
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            statusElement.textContent = `${playerNames[currentPlayer]}'s turn`;
+        };
+
+        const handleCellClick = (clickedCellEvent) => {
+            const clickedCell = clickedCellEvent.target;
+            const clickedCellIndex = parseInt(clickedCell.getAttribute('data-cell-index'));
+
+            if (board[clickedCellIndex] !== '' || !isGameActive) return;
+
+            board[clickedCellIndex] = currentPlayer;
+            clickedCell.textContent = currentPlayer;
+            // Add responsive font size to cells
+            clickedCell.classList.add(currentPlayer.toLowerCase(), 'text-5xl', 'sm:text-6xl');
+
+            handleResultValidation();
+        };
+        
+        const startNewRound = () => {
+            board = ['', '', '', '', '', '', '', '', ''];
+            isGameActive = true;
+            // It's good practice to let X start each new round
+            currentPlayer = 'X';
+            statusElement.textContent = `${playerNames[currentPlayer]}'s turn`;
+            boardElement.innerHTML = ''; // Clear old board
+            createBoard(); // Recreate board
+        };
+
+        const updateScoreboard = () => {
+            scoreNameX.textContent = playerNames.X;
+            scoreValueX.textContent = scores.X;
+            scoreNameO.textContent = playerNames.O;
+            scoreValueO.textContent = scores.O;
+        };
+
+        const initializeGame = () => {
+            playerNames.X = playerXNameInput.value || 'Player X';
+            playerNames.O = playerONameInput.value || 'Player O';
+            
+            playerSetup.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            gameContainer.classList.add('flex');
+
+            updateScoreboard();
+            startNewRound();
+        };
+        
+        const resetGame = () => {
+            scores = { X: 0, O: 0 };
+            playerNames = { X: 'Player X', O: 'Player O' };
+            playerXNameInput.value = 'Player X';
+            playerONameInput.value = 'Player O';
+
+            gameContainer.classList.add('hidden');
+            gameContainer.classList.remove('flex');
+            playerSetup.classList.remove('hidden');
+        };
+
+        function createBoard() {
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                cell.setAttribute('data-cell-index', i);
+                cell.addEventListener('click', handleCellClick);
+                boardElement.appendChild(cell);
+            }
+        }
+
+        // Event Listeners
+        startGameBtn.addEventListener('click', initializeGame);
+        restartBtn.addEventListener('click', startNewRound);
+        resetGameBtn.addEventListener('click', resetGame);
+    </script>
+</body>
+</html>
