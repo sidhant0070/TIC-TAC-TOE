@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tic-Tac-Toe with Scoreboard</title>
+    <title>Tic-Tac-Toe Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -11,7 +11,6 @@
             font-family: 'Poppins', sans-serif;
             background-color: #1a1a2e;
             color: #e0e0e0;
-            /* Prevent scrolling on the body itself */
             overflow: hidden;
             height: 100vh;
         }
@@ -41,6 +40,16 @@
             background-color: #f9c74f;
             animation: pulse 0.8s infinite;
         }
+        /* Disabled state for when it's not your turn */
+        .cell.disabled {
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+        .cell.disabled:hover {
+            background-color: #16213e;
+            transform: none;
+        }
+
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.1); }
@@ -48,7 +57,7 @@
         }
         .status {
             font-weight: 600;
-            min-height: 30px; /* Further reduced height */
+            min-height: 30px;
             color: #f9c74f;
         }
         .btn {
@@ -64,14 +73,16 @@
         .restart-btn:hover { background-color: #c7304a; transform: translateY(-2px); }
         .start-btn { background-color: #53a8b6; }
         .start-btn:hover { background-color: #3b8a99; transform: translateY(-2px); }
+        .copy-btn { background-color: #4b5563; }
+        .copy-btn:hover { background-color: #6b7280; }
         
         .scoreboard {
             display: flex;
             justify-content: space-around;
             width: 100%;
-            max-width: 300px; /* Match smaller board size */
+            max-width: 300px;
             background-color: #16213e;
-            padding: 0.5rem; /* Reduced padding */
+            padding: 0.5rem;
             border-radius: 12px;
             border: 2px solid #0f3460;
         }
@@ -81,192 +92,520 @@
         .score-x { color: #e94560; }
         .score-o { color: #53a8b6; }
 
-        .player-setup input {
+        .input-field {
             background-color: #16213e;
             border: 2px solid #0f3460;
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1rem;
             border-radius: 8px;
             color: white;
             text-align: center;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.3s;
         }
+        .input-field:focus {
+            border-color: #53a8b6;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #53a8b6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="flex items-center justify-center">
 
-    <main class="flex flex-col items-center justify-center w-full p-4">
-        <div class="text-center my-2"> <!-- Reduced margin -->
-            <h1 class="text-4xl sm:text-5xl font-bold text-white">Tic-Tac-Toe</h1>
+    <main class="flex flex-col items-center justify-center w-full p-4 max-w-md mx-auto h-full">
+        <div class="text-center my-2">
+            <h1 class="text-4xl sm:text-5xl font-bold text-white tracking-wider">Tic-Tac-Toe</h1>
+            <p class="text-sm text-gray-400 mt-1">Online Multiplayer</p>
         </div>
 
-        <!-- Player Setup Screen -->
-        <div id="playerSetup" class="w-full max-w-xs flex flex-col items-center gap-4">
-            <div class="player-setup flex justify-around w-full">
-                <input type="text" id="playerXName" placeholder="Player X Name" value="Player X" class="w-2/5">
-                <input type="text" id="playerOName" placeholder="Player O Name" value="Player O" class="w-2/5">
+        <!-- Lobby Screen -->
+        <div id="lobbyScreen" class="w-full flex flex-col items-center gap-4 transition-all duration-300">
+            <div class="w-full space-y-3">
+                <label class="block text-gray-400 text-sm mb-1 ml-1">Your Name</label>
+                <input type="text" id="playerNameInput" placeholder="Enter your name" class="input-field" value="Player 1">
             </div>
-            <button id="startGameBtn" class="btn start-btn w-full">Start Game</button>
+            
+            <div class="w-full h-px bg-gray-700 my-2"></div>
+            
+            <button id="createGameBtn" class="btn start-btn w-full py-4 text-lg shadow-lg shadow-cyan-500/20">
+                Create New Game
+            </button>
+            
+            <div class="flex items-center w-full gap-2 mt-2">
+                <input type="text" id="joinCodeInput" placeholder="Enter Game Code" class="input-field flex-1 uppercase tracking-widest" maxlength="6">
+                <button id="joinGameBtn" class="btn restart-btn whitespace-nowrap">Join Game</button>
+            </div>
+            
+            <div id="lobbyStatus" class="text-red-400 text-sm h-5 font-medium"></div>
+        </div>
+
+        <!-- Waiting Screen -->
+        <div id="waitingScreen" class="hidden w-full flex-col items-center gap-6 text-center animate-fade-in">
+            <div class="bg-gray-800/50 p-6 rounded-xl border border-gray-700 w-full">
+                <p class="text-gray-400 mb-2">Share this code with your friend:</p>
+                <div class="flex items-center justify-center gap-3 mb-4">
+                    <span id="displayGameCode" class="text-4xl font-mono font-bold text-white tracking-widest select-all"></span>
+                    <button id="copyCodeBtn" class="btn copy-btn p-2" title="Copy to clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex items-center justify-center gap-2 text-cyan-400">
+                    <div class="loader"></div>
+                    <span>Waiting for opponent...</span>
+                </div>
+            </div>
+            <button id="cancelWaitBtn" class="btn restart-btn text-sm">Cancel</button>
         </div>
 
         <!-- Game Screen -->
-        <div id="gameContainer" class="hidden flex-col items-center">
-            <div id="scoreboard" class="scoreboard my-2"> <!-- Reduced margin -->
+        <div id="gameContainer" class="hidden flex-col items-center w-full transition-all duration-300">
+            <!-- Game Info Header -->
+            <div class="w-full flex justify-between items-center mb-2 px-2 text-xs text-gray-500">
+                <span>Room: <span id="roomCodeDisplay" class="font-mono text-gray-300"></span></span>
+                <span id="roleDisplay" class="bg-gray-800 px-2 py-1 rounded text-gray-300">Spectator</span>
+            </div>
+
+            <div id="scoreboard" class="scoreboard mb-3">
                 <div class="score">
-                    <div id="scoreNameX" class="score-name score-x">Player X</div>
+                    <div id="scoreNameX" class="score-name score-x truncate max-w-[100px]">Player X</div>
                     <div id="scoreValueX" class="score-value score-x">0</div>
                 </div>
                 <div class="score">
-                    <div id="scoreNameO" class="score-name score-o">Player O</div>
+                    <div id="scoreNameO" class="score-name score-o truncate max-w-[100px]">Player O</div>
                     <div id="scoreValueO" class="score-value score-o">0</div>
                 </div>
             </div>
 
-            <div id="status" class="status my-2 text-lg sm:text-xl text-center"></div> <!-- Reduced margin -->
-            <div id="board" class="board w-64 h-64 sm:w-72 sm:h-72 aspect-square my-2"></div> <!-- Using aspect-square and reduced margin -->
-            <div class="flex space-x-4 mt-2">
-                 <button id="restartBtn" class="restart-btn btn">New Round</button>
-                 <button id="resetGameBtn" class="btn start-btn">Reset Game</button>
+            <div id="status" class="status mb-3 text-lg text-center px-4 py-1 rounded bg-gray-800/30 w-full">Connecting...</div>
+            
+            <div id="board" class="board w-full max-w-[300px] aspect-square mb-3"></div>
+            
+            <div class="flex space-x-3 mt-1">
+                 <button id="restartBtn" class="restart-btn btn hidden">New Round</button>
+                 <button id="leaveGameBtn" class="btn copy-btn">Leave Game</button>
             </div>
         </div>
     </main>
 
-    <script>
-        // DOM Elements
-        const playerSetup = document.getElementById('playerSetup');
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+
+        // --- Configuration ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const GAMES_COLLECTION = 'tictactoe_games';
+
+        // --- State ---
+        let currentUser = null;
+        let currentGameId = null;
+        let myRole = null; // 'X' or 'O'
+        let unsubscribeGame = null;
+        let localPlayerName = "Player";
+
+        // --- DOM Elements ---
+        const lobbyScreen = document.getElementById('lobbyScreen');
+        const waitingScreen = document.getElementById('waitingScreen');
         const gameContainer = document.getElementById('gameContainer');
-        const startGameBtn = document.getElementById('startGameBtn');
+        const playerNameInput = document.getElementById('playerNameInput');
+        const joinCodeInput = document.getElementById('joinCodeInput');
+        const createGameBtn = document.getElementById('createGameBtn');
+        const joinGameBtn = document.getElementById('joinGameBtn');
+        const lobbyStatus = document.getElementById('lobbyStatus');
+        
+        const displayGameCode = document.getElementById('displayGameCode');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        const cancelWaitBtn = document.getElementById('cancelWaitBtn');
+        
         const boardElement = document.getElementById('board');
         const statusElement = document.getElementById('status');
         const restartBtn = document.getElementById('restartBtn');
-        const resetGameBtn = document.getElementById('resetGameBtn');
-        const playerXNameInput = document.getElementById('playerXName');
-        const playerONameInput = document.getElementById('playerOName');
+        const leaveGameBtn = document.getElementById('leaveGameBtn');
+        const roleDisplay = document.getElementById('roleDisplay');
+        const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+        
         const scoreNameX = document.getElementById('scoreNameX');
         const scoreValueX = document.getElementById('scoreValueX');
         const scoreNameO = document.getElementById('scoreNameO');
         const scoreValueO = document.getElementById('scoreValueO');
 
-        // Game State
-        let board = ['', '', '', '', '', '', '', '', ''];
-        let currentPlayer = 'X';
-        let isGameActive = true;
-        let scores = { X: 0, O: 0 };
-        let playerNames = { X: 'Player X', O: 'Player O' };
+        // --- Authentication ---
+        const initAuth = async () => {
+             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+             } else {
+                await signInAnonymously(auth);
+             }
+        };
+        
+        initAuth();
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                createGameBtn.disabled = false;
+                joinGameBtn.disabled = false;
+            }
+        });
 
+        // --- Helper Functions ---
+        const generateGameId = () => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No I, 1, 0, O
+            let result = '';
+            for (let i = 0; i < 6; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        };
+
+        const switchScreen = (screenName) => {
+            lobbyScreen.classList.add('hidden');
+            waitingScreen.classList.add('hidden');
+            gameContainer.classList.add('hidden');
+            gameContainer.classList.remove('flex'); // Remove flex when hidden
+
+            if (screenName === 'lobby') {
+                lobbyScreen.classList.remove('hidden');
+            } else if (screenName === 'waiting') {
+                waitingScreen.classList.remove('hidden');
+                waitingScreen.classList.add('flex');
+            } else if (screenName === 'game') {
+                gameContainer.classList.remove('hidden');
+                gameContainer.classList.add('flex');
+            }
+        };
+
+        // --- Game Logic ---
+        
         const winningConditions = [
             [0, 1, 2], [3, 4, 5], [6, 7, 8],
             [0, 3, 6], [1, 4, 7], [2, 5, 8],
             [0, 4, 8], [2, 4, 6]
         ];
 
-        function handleResultValidation() {
-            let roundWon = false;
-            let winningCombination = [];
+        // --- Create Game ---
+        createGameBtn.addEventListener('click', async () => {
+            if (!currentUser) return;
+            
+            const gameId = generateGameId();
+            localPlayerName = playerNameInput.value || "Player X";
+            
+            lobbyStatus.textContent = "Creating room...";
+            
+            try {
+                // Initial Game State
+                const gameState = {
+                    board: ['', '', '', '', '', '', '', '', ''],
+                    currentPlayer: 'X',
+                    status: 'waiting', // waiting, playing, finished
+                    winner: null,
+                    players: {
+                        [currentUser.uid]: 'X'
+                    },
+                    playerNames: {
+                        X: localPlayerName,
+                        O: "Waiting..."
+                    },
+                    scores: { X: 0, O: 0 },
+                    createdAt: new Date().toISOString()
+                };
+
+                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', GAMES_COLLECTION, gameId);
+                await setDoc(gameRef, gameState);
+
+                currentGameId = gameId;
+                myRole = 'X';
+                
+                displayGameCode.textContent = gameId;
+                switchScreen('waiting');
+                subscribeToGame(gameId);
+
+            } catch (err) {
+                console.error("Error creating game:", err);
+                lobbyStatus.textContent = "Error creating game. Try again.";
+            }
+        });
+
+        // --- Join Game ---
+        joinGameBtn.addEventListener('click', async () => {
+            if (!currentUser) return;
+
+            const gameId = joinCodeInput.value.trim().toUpperCase();
+            if (gameId.length !== 6) {
+                lobbyStatus.textContent = "Invalid code. Must be 6 characters.";
+                return;
+            }
+
+            localPlayerName = playerNameInput.value || "Player O";
+            lobbyStatus.textContent = "Joining room...";
+
+            try {
+                const gameRef = doc(db, 'artifacts', appId, 'public', 'data', GAMES_COLLECTION, gameId);
+                const docSnap = await getDoc(gameRef);
+
+                if (!docSnap.exists()) {
+                    lobbyStatus.textContent = "Game not found.";
+                    return;
+                }
+
+                const data = docSnap.data();
+
+                // Check if already full
+                if (data.status !== 'waiting' && !data.players[currentUser.uid]) {
+                     lobbyStatus.textContent = "Game is full or already started.";
+                     return;
+                }
+                
+                // If I am not in the game yet, add me
+                if (!data.players[currentUser.uid]) {
+                    const updates = {
+                        [`players.${currentUser.uid}`]: 'O',
+                        [`playerNames.O`]: localPlayerName,
+                        status: 'playing'
+                    };
+                    await updateDoc(gameRef, updates);
+                    myRole = 'O';
+                } else {
+                    // Rejoining as existing player
+                    myRole = data.players[currentUser.uid];
+                }
+
+                currentGameId = gameId;
+                switchScreen('game');
+                subscribeToGame(gameId);
+
+            } catch (err) {
+                console.error("Error joining game:", err);
+                lobbyStatus.textContent = "Error joining game.";
+            }
+        });
+
+        // --- Subscribe to Game Changes ---
+        const subscribeToGame = (gameId) => {
+            if (unsubscribeGame) unsubscribeGame();
+
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', GAMES_COLLECTION, gameId);
+            
+            unsubscribeGame = onSnapshot(gameRef, (docSnap) => {
+                if (!docSnap.exists()) {
+                    alert("Game was deleted.");
+                    resetLocalGame();
+                    return;
+                }
+
+                const data = docSnap.data();
+                updateUI(data);
+                
+                // If waiting screen is active but O has joined, switch to game
+                if (data.status === 'playing' && !gameContainer.classList.contains('flex') && myRole === 'X') {
+                    switchScreen('game');
+                }
+            }, (error) => {
+                console.error("Snapshot error:", error);
+            });
+        };
+
+        // --- Update UI from State ---
+        const updateUI = (data) => {
+            // Room Info
+            roomCodeDisplay.textContent = currentGameId;
+            roleDisplay.textContent = `You are ${myRole}`;
+            roleDisplay.className = `px-2 py-1 rounded text-white text-xs font-bold ${myRole === 'X' ? 'bg-[#e94560]' : 'bg-[#53a8b6]'}`;
+
+            // Scoreboard
+            scoreNameX.textContent = data.playerNames.X;
+            scoreNameO.textContent = data.playerNames.O;
+            scoreValueX.textContent = data.scores.X;
+            scoreValueO.textContent = data.scores.O;
+
+            // Status Message
+            if (data.status === 'waiting') {
+                statusElement.textContent = "Waiting for Player O...";
+                statusElement.className = 'status mb-3 text-lg text-center px-4 py-1 rounded bg-yellow-500/20 text-yellow-500 w-full';
+            } else if (data.status === 'finished') {
+                 if (data.winner === 'draw') {
+                    statusElement.textContent = "It's a Draw!";
+                    statusElement.className = 'status mb-3 text-lg text-center px-4 py-1 rounded bg-gray-500/20 text-gray-400 w-full';
+                 } else {
+                    const winnerName = data.playerNames[data.winner];
+                    statusElement.textContent = `${winnerName} Wins!`;
+                    statusElement.className = 'status mb-3 text-lg text-center px-4 py-1 rounded bg-green-500/20 text-green-400 w-full';
+                 }
+                 // Only Host can restart usually, but let's allow either to request (simplified: direct update)
+                 restartBtn.classList.remove('hidden');
+            } else {
+                // Playing
+                restartBtn.classList.add('hidden');
+                const isMyTurn = data.currentPlayer === myRole;
+                const currentName = data.playerNames[data.currentPlayer];
+                
+                if (isMyTurn) {
+                    statusElement.textContent = "Your Turn!";
+                    statusElement.className = 'status mb-3 text-lg text-center px-4 py-1 rounded bg-green-600 text-white shadow-lg shadow-green-900/50 w-full transform scale-105 transition-all';
+                } else {
+                    statusElement.textContent = `${currentName}'s Turn`;
+                    statusElement.className = 'status mb-3 text-lg text-center px-4 py-1 rounded bg-gray-800 text-gray-400 w-full';
+                }
+            }
+
+            // Render Board
+            renderBoard(data.board, data);
+        };
+
+        const renderBoard = (board, data) => {
+            boardElement.innerHTML = '';
+            const isMyTurn = data.currentPlayer === myRole && data.status === 'playing';
+
+            board.forEach((cell, index) => {
+                const cellDiv = document.createElement('div');
+                cellDiv.className = 'cell';
+                
+                // Styling
+                if (cell === 'X') {
+                    cellDiv.classList.add('x', 'text-5xl', 'sm:text-6xl');
+                } else if (cell === 'O') {
+                    cellDiv.classList.add('o', 'text-5xl', 'sm:text-6xl');
+                }
+                
+                // Content
+                cellDiv.textContent = cell;
+
+                // Win Highlight
+                if (data.status === 'finished' && data.winningCombination && data.winningCombination.includes(index)) {
+                    cellDiv.classList.add('win');
+                }
+
+                // Interaction
+                if (cell === '' && data.status === 'playing') {
+                    if (isMyTurn) {
+                        cellDiv.onclick = () => handleMove(index, data);
+                    } else {
+                        cellDiv.classList.add('disabled');
+                    }
+                } else if (data.status === 'playing' && !isMyTurn) {
+                     // Occupied cells
+                     cellDiv.classList.add('disabled');
+                }
+
+                boardElement.appendChild(cellDiv);
+            });
+        };
+
+        // --- Handle Move ---
+        const handleMove = async (index, currentData) => {
+            if (!currentUser || !currentGameId) return;
+
+            const newBoard = [...currentData.board];
+            newBoard[index] = myRole;
+
+            let winner = null;
+            let winningCombo = null;
+            let status = 'playing';
+            let scores = { ...currentData.scores };
+
+            // Check Win
             for (let i = 0; i < winningConditions.length; i++) {
-                const winCondition = winningConditions[i];
-                const a = board[winCondition[0]];
-                const b = board[winCondition[1]];
-                const c = board[winCondition[2]];
-                if (a === '' || b === '' || c === '') continue;
-                if (a === b && b === c) {
-                    roundWon = true;
-                    winningCombination = winCondition;
+                const [a, b, c] = winningConditions[i];
+                if (newBoard[a] && newBoard[a] === newBoard[b] && newBoard[a] === newBoard[c]) {
+                    winner = myRole;
+                    winningCombo = winningConditions[i];
+                    status = 'finished';
+                    scores[myRole]++;
                     break;
                 }
             }
 
-            if (roundWon) {
-                statusElement.textContent = `${playerNames[currentPlayer]} has won!`;
-                isGameActive = false;
-                scores[currentPlayer]++;
-                updateScoreboard();
-                winningCombination.forEach(index => {
-                    document.querySelector(`[data-cell-index='${index}']`).classList.add('win');
-                });
-                return;
+            // Check Draw
+            if (!winner && !newBoard.includes('')) {
+                winner = 'draw';
+                status = 'finished';
             }
 
-            if (!board.includes('')) {
-                statusElement.textContent = `Game ended in a draw!`;
-                isGameActive = false;
-                return;
+            const nextPlayer = myRole === 'X' ? 'O' : 'X';
+
+            const updates = {
+                board: newBoard,
+                currentPlayer: nextPlayer,
+                status: status,
+                winner: winner,
+                winningCombination: winningCombo || null,
+                scores: scores
+            };
+
+            const gameRef = doc(db, 'artifacts', appId, 'public', 'data', GAMES_COLLECTION, currentGameId);
+            await updateDoc(gameRef, updates);
+        };
+
+        // --- Restart Round ---
+        restartBtn.addEventListener('click', async () => {
+             if (!currentUser || !currentGameId) return;
+             
+             // Reset board but keep scores and players
+             const updates = {
+                 board: ['', '', '', '', '', '', '', '', ''],
+                 status: 'playing',
+                 winner: null,
+                 winningCombination: null,
+                 currentPlayer: 'X' // X always starts new round in this version
+             };
+             
+             const gameRef = doc(db, 'artifacts', appId, 'public', 'data', GAMES_COLLECTION, currentGameId);
+             await updateDoc(gameRef, updates);
+        });
+
+        // --- Leave / Reset ---
+        const resetLocalGame = () => {
+            if (unsubscribeGame) unsubscribeGame();
+            unsubscribeGame = null;
+            currentGameId = null;
+            myRole = null;
+            switchScreen('lobby');
+            lobbyStatus.textContent = "";
+            joinCodeInput.value = "";
+        };
+
+        leaveGameBtn.addEventListener('click', resetLocalGame);
+        cancelWaitBtn.addEventListener('click', resetLocalGame);
+
+        // --- Utilities ---
+        copyCodeBtn.addEventListener('click', () => {
+            // Use execCommand as fallback for iframe restrictions
+            const textarea = document.createElement('textarea');
+            textarea.value = displayGameCode.textContent;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                const originalText = copyCodeBtn.innerHTML;
+                copyCodeBtn.innerHTML = '<span class="text-green-400">✓</span>';
+                setTimeout(() => copyCodeBtn.innerHTML = originalText, 2000);
+            } catch (err) {
+                console.error('Copy failed', err);
             }
-
-            changePlayer();
-        }
-
-        const changePlayer = () => {
-            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-            statusElement.textContent = `${playerNames[currentPlayer]}'s turn`;
-        };
-
-        const handleCellClick = (clickedCellEvent) => {
-            const clickedCell = clickedCellEvent.target;
-            const clickedCellIndex = parseInt(clickedCell.getAttribute('data-cell-index'));
-
-            if (board[clickedCellIndex] !== '' || !isGameActive) return;
-
-            board[clickedCellIndex] = currentPlayer;
-            clickedCell.textContent = currentPlayer;
-            // Add responsive font size to cells
-            clickedCell.classList.add(currentPlayer.toLowerCase(), 'text-5xl', 'sm:text-6xl');
-
-            handleResultValidation();
-        };
+            document.body.removeChild(textarea);
+        });
         
-        const startNewRound = () => {
-            board = ['', '', '', '', '', '', '', '', ''];
-            isGameActive = true;
-            // It's good practice to let X start each new round
-            currentPlayer = 'X';
-            statusElement.textContent = `${playerNames[currentPlayer]}'s turn`;
-            boardElement.innerHTML = ''; // Clear old board
-            createBoard(); // Recreate board
-        };
+        // Auto-uppercase join code
+        joinCodeInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
 
-        const updateScoreboard = () => {
-            scoreNameX.textContent = playerNames.X;
-            scoreValueX.textContent = scores.X;
-            scoreNameO.textContent = playerNames.O;
-            scoreValueO.textContent = scores.O;
-        };
-
-        const initializeGame = () => {
-            playerNames.X = playerXNameInput.value || 'Player X';
-            playerNames.O = playerONameInput.value || 'Player O';
-            
-            playerSetup.classList.add('hidden');
-            gameContainer.classList.remove('hidden');
-            gameContainer.classList.add('flex');
-
-            updateScoreboard();
-            startNewRound();
-        };
-        
-        const resetGame = () => {
-            scores = { X: 0, O: 0 };
-            playerNames = { X: 'Player X', O: 'Player O' };
-            playerXNameInput.value = 'Player X';
-            playerONameInput.value = 'Player O';
-
-            gameContainer.classList.add('hidden');
-            gameContainer.classList.remove('flex');
-            playerSetup.classList.remove('hidden');
-        };
-
-        function createBoard() {
-            for (let i = 0; i < 9; i++) {
-                const cell = document.createElement('div');
-                cell.classList.add('cell');
-                cell.setAttribute('data-cell-index', i);
-                cell.addEventListener('click', handleCellClick);
-                boardElement.appendChild(cell);
-            }
-        }
-
-        // Event Listeners
-        startGameBtn.addEventListener('click', initializeGame);
-        restartBtn.addEventListener('click', startNewRound);
-        resetGameBtn.addEventListener('click', resetGame);
     </script>
 </body>
 </html>
